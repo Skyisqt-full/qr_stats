@@ -4,8 +4,8 @@
   "private": true,
   "main": "server.js",
   "scripts": {
-    "dev": "node server.js",
-    "start": "node server.js"
+    "dev": "node server/server.js",
+    "start": "node server/server.js"
   },
   "engines": {
     "node": "20.x"
