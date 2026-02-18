@@ -1,107 +1,85 @@
-// server/routes/public.js
+// server/routes/admin.js
 const express = require('express');
 const {
-  addVisit,
-  createSubmission,
-  getSubmissionById,
-  getLatestByPhone,
-  getLatestByPhoneWithPrize,
-  setPrize,
-  setName
+  countVisits,
+  listSubmissions,
+  deleteSubmission,
+  prizeStats,
+  resetVisits,
+  resetSubmissions
 } = require('../db');
-
-const { normalizeBYPhone } = require('../phone');
-const { ALL_PRIZES, ALLOWED_PRIZES } = require('../config');
-const { getProgrammedPrize } = require('../prizes');
 
 const router = express.Router();
 
-router.get('/ping', (req, res) => res.json({ ok: true, scope: 'public' }));
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASS = process.env.ADMIN_PASS || 'admin';
 
-router.get('/prizes', (req, res) => {
-  res.json({ ok: true, allPrizes: ALL_PRIZES, allowedPrizes: ALLOWED_PRIZES });
+function requireAdmin(req, res, next) {
+  if (req.session?.isAdmin) return next();
+  return res.status(401).json({ ok: false, error: 'Unauthorized' });
+}
+
+// Логин (поддержим оба формата body: username/password и user/pass)
+router.post('/login', (req, res) => {
+  const u = String(req.body?.username ?? req.body?.user ?? '');
+  const p = String(req.body?.password ?? req.body?.pass ?? '');
+
+  if (u === ADMIN_USER && p === ADMIN_PASS) {
+    req.session.isAdmin = true;
+    return res.json({ ok: true });
+  }
+  return res.status(401).json({ ok: false, error: 'Неверный логин/пароль' });
 });
 
-router.post('/visit', async (req, res) => {
-  await addVisit();
+router.post('/logout', (req, res) => {
+  if (req.session) req.session.destroy(() => {});
   res.json({ ok: true });
 });
 
-router.post('/submit-phone', async (req, res) => {
-  const phone = req.body?.phone;
-  const name = String(req.body?.name || '').trim();
+// ----- дальше всё защищено -----
+router.use(requireAdmin);
 
-  if (name.length < 2) return res.status(400).json({ ok: false, error: 'Введите имя (минимум 2 символа)' });
-
-  const norm = normalizeBYPhone(phone);
-  if (!norm.ok) return res.status(400).json({ ok: false, error: norm.error });
-
-  const existingWithPrize = await getLatestByPhoneWithPrize(norm.phoneNorm);
-  if (existingWithPrize) {
-    if (!existingWithPrize.name || existingWithPrize.name !== name) {
-      await setName(existingWithPrize.id, name);
-    }
-    return res.json({
-      ok: true,
-      already: true,
-      submissionId: existingWithPrize.id,
-      phoneNorm: existingWithPrize.phone_norm,
-      name,
-      prize: existingWithPrize.prize
-    });
-  }
-
-  const existing = await getLatestByPhone(norm.phoneNorm);
-  if (existing && !existing.prize) {
-    if (!existing.name || existing.name !== name) {
-      await setName(existing.id, name);
-    }
-    return res.json({
-      ok: true,
-      already: false,
-      submissionId: existing.id,
-      phoneNorm: existing.phone_norm,
-      name
-    });
-  }
-
-  const submissionId = await createSubmission(norm.phoneNorm, name);
-  return res.json({ ok: true, already: false, submissionId, phoneNorm: norm.phoneNorm, name });
+// Счётчик посещений
+router.get('/stats', async (req, res) => {
+  const visitsTotal = await countVisits();
+  res.json({ ok: true, visitsTotal });
 });
 
-router.post('/get-prize', async (req, res) => {
-  const submissionId = req.body?.submissionId;
-  const row = await getSubmissionById(submissionId);
-  if (!row) return res.status(404).json({ ok: false, error: 'Заявка не найдена' });
-
-  if (row.prize) return res.json({ ok: true, prize: row.prize, alreadySaved: true });
-
-  let prize = '';
-  try {
-    prize = getProgrammedPrize(row.id);
-  } catch {
-    return res.status(500).json({ ok: false, error: 'Ошибка выдачи приза' });
-  }
-
-  return res.json({ ok: true, prize, alreadySaved: false });
+// Статистика по призам (ТОГО НЕ ХВАТАЛО → 404)
+router.get('/prize-stats', async (req, res) => {
+  const rows = await prizeStats();
+  res.json({ ok: true, rows });
 });
 
-router.post('/save-result', async (req, res) => {
-  const submissionId = req.body?.submissionId;
-  const prize = String(req.body?.prize || '');
+// Таблица заявок
+router.get('/submissions', async (req, res) => {
+  const prize = req.query?.prize;
+  const sort = req.query?.sort;
+  const order = req.query?.order;
 
-  const row = await getSubmissionById(submissionId);
-  if (!row) return res.status(404).json({ ok: false, error: 'Заявка не найдена' });
+  const rows = await listSubmissions({ prize, sort, order });
+  res.json({ ok: true, rows });
+});
 
-  if (row.prize) return res.json({ ok: true, alreadySaved: true, prize: row.prize });
+router.delete('/submissions/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'Некорректный id' });
 
-  const expected = getProgrammedPrize(row.id);
-  if (prize !== expected) return res.status(400).json({ ok: false, error: 'Подмена приза запрещена' });
+  const changes = await deleteSubmission(id);
+  if (!changes) return res.status(404).json({ ok: false, error: 'Запись не найдена' });
 
-  const changes = await setPrize(row.id, expected);
-  if (!changes) return res.status(500).json({ ok: false, error: 'Не удалось сохранить приз' });
+  res.json({ ok: true });
+});
 
-  return res.json({ ok: true, alreadySaved: false, prize: expected });
+// Сбросы
+router.post('/reset-visits', async (req, res) => {
+  await resetVisits();
+  res.json({ ok: true });
+});
+
+router.post('/reset-submissions', async (req, res) => {
+  await resetSubmissions();
+  res.json({ ok: true });
 });
 
 module.exports = router;
