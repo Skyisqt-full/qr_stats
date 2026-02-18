@@ -45,11 +45,11 @@ app.get('/admin', (req, res) => {
 // главная
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
 
-const port = Number(process.env.PORT || 3000);
+const PORT = process.env.PORT || 10000;
 
 (async () => {
   await initDb();
-  app.listen(port, () => console.log(`qr_stats listening on :${port}`));
+  app.listen(PORT, () => console.log(`qr_stats listening on :${PORT}`));
 })().catch((e) => {
   console.error('Startup failed:', e);
   process.exit(1);
