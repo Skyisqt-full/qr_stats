@@ -12,6 +12,7 @@ const adminRoutes = require('./routes/admin');
 const app = express();
 
 app.set('trust proxy', 1);
+
 app.use(express.json({ limit: '1mb' }));
 
 app.use(
@@ -22,8 +23,8 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production'
-    }
+      secure: process.env.NODE_ENV === 'production', // на Render ставь NODE_ENV=production
+    },
   })
 );
 
@@ -31,7 +32,7 @@ app.use(
 app.use('/api', publicRoutes);
 app.use('/api/admin', adminRoutes);
 
-// static (public и admin лежат НА УРОВЕНЬ ВЫШЕ)
+// static (public и admin лежат НА УРОВЕНЬ ВЫШЕ папки server/)
 app.use('/', express.static(path.join(__dirname, '..', 'public')));
 app.use('/admin', express.static(path.join(__dirname, '..', 'admin')));
 
@@ -41,6 +42,7 @@ app.get('/admin', (req, res) => {
   return res.redirect('/admin/login.html');
 });
 
+// главная
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
 
 const port = Number(process.env.PORT || 3000);

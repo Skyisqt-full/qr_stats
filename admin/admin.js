@@ -15,10 +15,13 @@ function pickDate(row) {
 
 async function getJson(url) {
   const r = await fetch(url, { credentials: 'same-origin' });
+
+  // если сессии нет — уйдём на логин
   if (r.status === 401) {
     window.location.href = '/admin/login.html';
     return null;
   }
+
   const data = await r.json().catch(() => ({}));
   if (!r.ok || data?.ok === false) throw new Error(data?.error || 'Ошибка загрузки');
   return data;
@@ -67,6 +70,7 @@ function buildSubmissionsUrl(prize, sort, order) {
 async function loadPrizeFilterOptions() {
   const select = document.getElementById('prizeFilter');
 
+  // оставляем "Все" и "Без приза"
   while (select.options.length > 2) select.remove(2);
 
   const cfg = await getJson('/api/prizes');
@@ -92,6 +96,7 @@ async function loadAll() {
   const sortBy = document.getElementById('sortBy').value;
   const order = document.getElementById('order').value;
 
+  // ВАЖНО: абсолютные пути
   const stats = await getJson('/api/admin/stats');
   if (!stats) return;
   visitsEl.textContent = String(stats.visitsTotal);
@@ -170,7 +175,6 @@ async function loadAll() {
 document.addEventListener('DOMContentLoaded', async () => {
   const refreshBtn = document.getElementById('refreshBtn');
   const logoutBtn = document.getElementById('logoutBtn');
-
   const resetVisitsBtn = document.getElementById('resetVisitsBtn');
   const resetSubsBtn = document.getElementById('resetSubsBtn');
 
@@ -205,7 +209,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  resetVisitsBtn.addEventListener('click', async () => {
+  resetVisitsBtn?.addEventListener('click', async () => {
     if (!confirm('Точно сбросить счётчик переходов по QR?')) return;
     resetVisitsBtn.disabled = true;
     try {
@@ -218,7 +222,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  resetSubsBtn.addEventListener('click', async () => {
+  resetSubsBtn?.addEventListener('click', async () => {
     if (!confirm('Точно удалить ВСЕ заявки и сбросить ID? Это удалит историю выигрышей.')) return;
     resetSubsBtn.disabled = true;
     try {
@@ -233,9 +237,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     await loadPrizeFilterOptions();
-  } catch {
-    // не критично
-  }
+  } catch {}
 
   refreshBtn.click();
 });

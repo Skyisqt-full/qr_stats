@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: qr-stats-web
+    name: bonus-by-isaev
     runtime: node
     plan: free
     region: frankfurt
@@ -17,12 +17,12 @@ services:
         sync: false
       - key: DATABASE_URL
         fromDatabase:
-          name: qr-stats-db
+          name: bonus-by-isaev-db
           property: connectionString
 
 databases:
-  - name: qr-stats-db
+  - name: bonus-by-isaev-db
     plan: free
     region: frankfurt
-    databaseName: qr_stats
-    user: qr_stats
+    databaseName: bonus_by_isaev
+    user: bonus_by_isaev
