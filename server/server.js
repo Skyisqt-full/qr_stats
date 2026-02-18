@@ -1,18 +1,17 @@
-// server.js
+// server/server.js
 require('dotenv').config();
 
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
 
-const { initDb } = require('./server/db');
-const publicRoutes = require('./server/routes/public');
-const adminRoutes = require('./server/routes/admin');
+const { initDb } = require('./db');
+const publicRoutes = require('./routes/public');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 
 app.set('trust proxy', 1);
-
 app.use(express.json({ limit: '1mb' }));
 
 app.use(
@@ -32,17 +31,17 @@ app.use(
 app.use('/api', publicRoutes);
 app.use('/api/admin', adminRoutes);
 
-// static
-app.use('/', express.static(path.join(__dirname, 'public')));
-app.use('/admin', express.static(path.join(__dirname, 'admin')));
+// static (public и admin лежат НА УРОВЕНЬ ВЫШЕ)
+app.use('/', express.static(path.join(__dirname, '..', 'public')));
+app.use('/admin', express.static(path.join(__dirname, '..', 'admin')));
 
-// красивый /admin (если не залогинен — на логин)
+// /admin -> если не залогинен, на логин
 app.get('/admin', (req, res) => {
-  if (req.session?.isAdmin) return res.sendFile(path.join(__dirname, 'admin', 'index.html'));
+  if (req.session?.isAdmin) return res.sendFile(path.join(__dirname, '..', 'admin', 'index.html'));
   return res.redirect('/admin/login.html');
 });
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'index.html')));
 
 const port = Number(process.env.PORT || 3000);
 
