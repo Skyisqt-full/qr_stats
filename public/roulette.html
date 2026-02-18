@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Рулетка</title>
+    <link rel="stylesheet" href="/roulette.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="top">
+        <h1>Рулетка бонусов ISAEVHOME</h1>
+      </header>
+
+      <section class="card">
+        <div class="wheelWrap">
+          <canvas id="wheel" width="720" height="720"></canvas>
+          <div class="pointer" aria-hidden="true"></div>
+        </div>
+
+        <div class="row">
+          <button id="spinBtn" class="btn primary" type="button">
+            Крутить
+          </button>
+          <a class="btn ghost" href="/">На главную</a>
+        </div>
+
+        <div id="status" class="status" aria-live="polite"></div>
+        <div id="error" class="error" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <!-- Модалка результата -->
+    <div id="modal" class="modal" aria-hidden="true">
+      <div
+        class="modalCard"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modalTitle"
+      >
+        <div class="modalTop">
+          <div id="modalTitle" class="modalTitle">Ваш приз</div>
+          <button
+            id="modalClose"
+            class="iconBtn"
+            type="button"
+            aria-label="Закрыть"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div id="modalPrize" class="modalPrize"></div>
+        <div class="modalHint">
+          Поздравляем с выигрышем! Ожидайте, мы свяжемся с вами.
+        </div>
+
+        <div class="modalActions">
+          <button id="modalOk" class="btn primary" type="button">Ок</button>
+          <a class="btn ghost" href="/">На главную</a>
+        </div>
+      </div>
+    </div>
+
+    <script src="/roulette.js"></script>
+  </body>
+</html>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Получите бонус</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bgGlow"></div>
+
+    <main class="page">
+      <header class="hero">
+        <div class="brandPill">QR Bonus</div>
+        <h1>Получите бонус</h1>
+        <p class="sub">
+          Введите имя и номер телефона — и сразу откроется рулетка с призом.
+        </p>
+      </header>
+
+      <section class="card">
+        <label class="label" for="name">Имя</label>
+        <div class="inputRow">
+          <input
+            id="name"
+            class="input"
+            type="text"
+            placeholder="Например: Анна"
+            autocomplete="name"
+          />
+        </div>
+
+        <div style="height: 10px"></div>
+
+        <label class="label" for="phone">Телефон (Беларусь)</label>
+        <div class="inputRow">
+          <input
+            id="phone"
+            class="input"
+            type="tel"
+            inputmode="tel"
+            placeholder="+375291234567 / 375291234567 / 80291234567"
+            autocomplete="tel"
+          />
+        </div>
+
+        <div class="actions">
+          <button id="submitBtn" class="btn primary" type="button">
+            Получить бонус
+          </button>
+        </div>
+
+        <div class="hint">
+          Поддерживаем форматы: <b>+375XXXXXXXXX</b>, <b>375XXXXXXXXX</b>,
+          <b>80XXXXXXXXX</b>
+        </div>
+
+        <div id="msg" class="msg" aria-live="polite"></div>
+        <div id="err" class="err" aria-live="polite"></div>
+      </section>
+
+      <footer class="footer">
+        <span class="muted">© qr_stats</span>
+      </footer>
+    </main>
+
+    <script src="/landing.js"></script>
+  </body>
+</html>

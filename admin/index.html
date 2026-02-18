@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Админка</title>
+    <link rel="stylesheet" href="/admin/admin.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="header">
+        <h1>Админка</h1>
+        <div class="headerRight">
+          <div class="stat">
+            Переходов по QR: <span id="visitsTotal">0</span>
+          </div>
+          <button id="logoutBtn" class="btn ghost" type="button">Выйти</button>
+        </div>
+      </div>
+
+      <div class="controls card">
+        <div class="control">
+          <label class="label" for="prizeFilter">Фильтр по призу</label>
+          <select id="prizeFilter" class="select">
+            <option value="">Все</option>
+            <option value="__NO_PRIZE__">Без приза</option>
+          </select>
+        </div>
+
+        <div class="control">
+          <label class="label" for="sortBy">Сортировка</label>
+          <select id="sortBy" class="select">
+            <option value="id">ID</option>
+            <option value="created_at">Дата отправки</option>
+            <option value="prized_at">Дата приза</option>
+            <option value="prize">Приз</option>
+            <option value="name">Имя</option>
+            <option value="phone_norm">Телефон</option>
+          </select>
+        </div>
+
+        <div class="control">
+          <label class="label" for="order">Порядок</label>
+          <select id="order" class="select">
+            <option value="desc">↓ новые</option>
+            <option value="asc">↑ старые</option>
+          </select>
+        </div>
+
+        <div class="control controlBtn">
+          <button id="refreshBtn" class="btn" type="button">Обновить</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="h2">Выигрыши по призам</h2>
+        <div id="prizeStats" class="prizeStats"></div>
+      </div>
+
+      <div class="card">
+        <h2 class="h2">Заявки</h2>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th style="width: 70px">ID</th>
+              <th style="width: 160px">Имя</th>
+              <th style="width: 170px">Телефон</th>
+              <th>Приз</th>
+              <th style="width: 190px">Дата/время</th>
+              <th style="width: 120px">Действия</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+
+        <div id="empty" class="muted" style="display: none; padding-top: 10px">
+          Пока нет записей по выбранному фильтру.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="h2">Опасная зона</h2>
+        <div class="muted" style="margin-bottom: 10px">
+          Эти действия удаляют данные. Используйте только если точно нужно.
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap">
+          <button id="resetVisitsBtn" class="btnDanger" type="button">
+            Сбросить переходы по QR
+          </button>
+          <button id="resetSubsBtn" class="btnDanger" type="button">
+            Сбросить заявки / ID призов
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <script src="/admin/admin.js"></script>
+  </body>
+</html>
