@@ -1,56 +1,107 @@
-// server/routes/admin.js
+// server/routes/public.js
 const express = require('express');
 const {
-  countVisits,
-  listSubmissions,
-  deleteSubmission,
-  prizeStats,
-  resetVisits,
-  resetSubmissions
+  addVisit,
+  createSubmission,
+  getSubmissionById,
+  getLatestByPhone,
+  getLatestByPhoneWithPrize,
+  setPrize,
+  setName
 } = require('../db');
+
+const { normalizeBYPhone } = require('../phone');
+const { ALL_PRIZES, ALLOWED_PRIZES } = require('../config');
+const { getProgrammedPrize } = require('../prizes');
 
 const router = express.Router();
 
-router.get('/stats', (req, res) => {
-  const visitsTotal = countVisits();
-  res.json({ ok: true, visitsTotal });
+router.get('/ping', (req, res) => res.json({ ok: true, scope: 'public' }));
+
+router.get('/prizes', (req, res) => {
+  res.json({ ok: true, allPrizes: ALL_PRIZES, allowedPrizes: ALLOWED_PRIZES });
 });
 
-router.get('/prize-stats', (req, res) => {
-  const rows = prizeStats();
-  res.json({ ok: true, rows });
-});
-
-router.get('/submissions', (req, res) => {
-  const prize = req.query?.prize;
-  const sort = req.query?.sort;
-  const order = req.query?.order;
-
-  const rows = listSubmissions({ prize, sort, order });
-  res.json({ ok: true, rows });
-});
-
-router.delete('/submissions/:id', (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ ok: false, error: 'Некорректный id' });
-
-  const changes = deleteSubmission(id);
-  if (!changes) return res.status(404).json({ ok: false, error: 'Запись не найдена' });
-
+router.post('/visit', async (req, res) => {
+  await addVisit();
   res.json({ ok: true });
 });
 
-// --- RESET ---
-// Сброс переходов по QR
-router.post('/reset-visits', (req, res) => {
-  resetVisits();
-  res.json({ ok: true });
+router.post('/submit-phone', async (req, res) => {
+  const phone = req.body?.phone;
+  const name = String(req.body?.name || '').trim();
+
+  if (name.length < 2) return res.status(400).json({ ok: false, error: 'Введите имя (минимум 2 символа)' });
+
+  const norm = normalizeBYPhone(phone);
+  if (!norm.ok) return res.status(400).json({ ok: false, error: norm.error });
+
+  const existingWithPrize = await getLatestByPhoneWithPrize(norm.phoneNorm);
+  if (existingWithPrize) {
+    if (!existingWithPrize.name || existingWithPrize.name !== name) {
+      await setName(existingWithPrize.id, name);
+    }
+    return res.json({
+      ok: true,
+      already: true,
+      submissionId: existingWithPrize.id,
+      phoneNorm: existingWithPrize.phone_norm,
+      name,
+      prize: existingWithPrize.prize
+    });
+  }
+
+  const existing = await getLatestByPhone(norm.phoneNorm);
+  if (existing && !existing.prize) {
+    if (!existing.name || existing.name !== name) {
+      await setName(existing.id, name);
+    }
+    return res.json({
+      ok: true,
+      already: false,
+      submissionId: existing.id,
+      phoneNorm: existing.phone_norm,
+      name
+    });
+  }
+
+  const submissionId = await createSubmission(norm.phoneNorm, name);
+  return res.json({ ok: true, already: false, submissionId, phoneNorm: norm.phoneNorm, name });
 });
 
-// Сброс заявок + сброс авто-ID (программирование по id начнётся заново)
-router.post('/reset-submissions', (req, res) => {
-  resetSubmissions();
-  res.json({ ok: true });
+router.post('/get-prize', async (req, res) => {
+  const submissionId = req.body?.submissionId;
+  const row = await getSubmissionById(submissionId);
+  if (!row) return res.status(404).json({ ok: false, error: 'Заявка не найдена' });
+
+  if (row.prize) return res.json({ ok: true, prize: row.prize, alreadySaved: true });
+
+  let prize = '';
+  try {
+    prize = getProgrammedPrize(row.id);
+  } catch {
+    return res.status(500).json({ ok: false, error: 'Ошибка выдачи приза' });
+  }
+
+  return res.json({ ok: true, prize, alreadySaved: false });
+});
+
+router.post('/save-result', async (req, res) => {
+  const submissionId = req.body?.submissionId;
+  const prize = String(req.body?.prize || '');
+
+  const row = await getSubmissionById(submissionId);
+  if (!row) return res.status(404).json({ ok: false, error: 'Заявка не найдена' });
+
+  if (row.prize) return res.json({ ok: true, alreadySaved: true, prize: row.prize });
+
+  const expected = getProgrammedPrize(row.id);
+  if (prize !== expected) return res.status(400).json({ ok: false, error: 'Подмена приза запрещена' });
+
+  const changes = await setPrize(row.id, expected);
+  if (!changes) return res.status(500).json({ ok: false, error: 'Не удалось сохранить приз' });
+
+  return res.json({ ok: true, alreadySaved: false, prize: expected });
 });
 
 module.exports = router;

@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: qr-stats-web
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_USER
+        value: admin
+      - key: ADMIN_PASS
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: qr-stats-db
+          property: connectionString
+
+databases:
+  - name: qr-stats-db
+    plan: free
+    region: frankfurt
+    databaseName: qr_stats
+    user: qr_stats

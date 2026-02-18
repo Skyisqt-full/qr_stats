@@ -16,39 +16,31 @@ const { getProgrammedPrize } = require('../prizes');
 
 const router = express.Router();
 
-router.get('/ping', (req, res) => {
-  res.json({ ok: true, scope: 'public' });
-});
+router.get('/ping', (req, res) => res.json({ ok: true, scope: 'public' }));
 
 router.get('/prizes', (req, res) => {
   res.json({ ok: true, allPrizes: ALL_PRIZES, allowedPrizes: ALLOWED_PRIZES });
 });
 
-router.post('/visit', (req, res) => {
-  addVisit();
+router.post('/visit', async (req, res) => {
+  await addVisit();
   res.json({ ok: true });
 });
 
-router.post('/submit-phone', (req, res) => {
+router.post('/submit-phone', async (req, res) => {
   const phone = req.body?.phone;
   const name = String(req.body?.name || '').trim();
 
-  if (name.length < 2) {
-    return res.status(400).json({ ok: false, error: 'Введите имя (минимум 2 символа)' });
-  }
+  if (name.length < 2) return res.status(400).json({ ok: false, error: 'Введите имя (минимум 2 символа)' });
 
   const norm = normalizeBYPhone(phone);
-  if (!norm.ok) {
-    return res.status(400).json({ ok: false, error: norm.error });
-  }
+  if (!norm.ok) return res.status(400).json({ ok: false, error: norm.error });
 
-  // если уже есть запись с призом — возвращаем её и обновим имя в записи
-  const existingWithPrize = getLatestByPhoneWithPrize(norm.phoneNorm);
+  const existingWithPrize = await getLatestByPhoneWithPrize(norm.phoneNorm);
   if (existingWithPrize) {
     if (!existingWithPrize.name || existingWithPrize.name !== name) {
-      setName(existingWithPrize.id, name);
+      await setName(existingWithPrize.id, name);
     }
-
     return res.json({
       ok: true,
       already: true,
@@ -59,13 +51,11 @@ router.post('/submit-phone', (req, res) => {
     });
   }
 
-  // если есть запись без приза — используем её и обновим имя
-  const existing = getLatestByPhone(norm.phoneNorm);
+  const existing = await getLatestByPhone(norm.phoneNorm);
   if (existing && !existing.prize) {
     if (!existing.name || existing.name !== name) {
-      setName(existing.id, name);
+      await setName(existing.id, name);
     }
-
     return res.json({
       ok: true,
       already: false,
@@ -75,15 +65,13 @@ router.post('/submit-phone', (req, res) => {
     });
   }
 
-  // иначе создаём новую
-  const submissionId = createSubmission(norm.phoneNorm, name);
+  const submissionId = await createSubmission(norm.phoneNorm, name);
   return res.json({ ok: true, already: false, submissionId, phoneNorm: norm.phoneNorm, name });
 });
 
-router.post('/get-prize', (req, res) => {
+router.post('/get-prize', async (req, res) => {
   const submissionId = req.body?.submissionId;
-
-  const row = getSubmissionById(submissionId);
+  const row = await getSubmissionById(submissionId);
   if (!row) return res.status(404).json({ ok: false, error: 'Заявка не найдена' });
 
   if (row.prize) return res.json({ ok: true, prize: row.prize, alreadySaved: true });
@@ -98,23 +86,19 @@ router.post('/get-prize', (req, res) => {
   return res.json({ ok: true, prize, alreadySaved: false });
 });
 
-router.post('/save-result', (req, res) => {
+router.post('/save-result', async (req, res) => {
   const submissionId = req.body?.submissionId;
   const prize = String(req.body?.prize || '');
 
-  const row = getSubmissionById(submissionId);
+  const row = await getSubmissionById(submissionId);
   if (!row) return res.status(404).json({ ok: false, error: 'Заявка не найдена' });
 
-  if (row.prize) {
-    return res.json({ ok: true, alreadySaved: true, prize: row.prize });
-  }
+  if (row.prize) return res.json({ ok: true, alreadySaved: true, prize: row.prize });
 
   const expected = getProgrammedPrize(row.id);
-  if (prize !== expected) {
-    return res.status(400).json({ ok: false, error: 'Подмена приза запрещена' });
-  }
+  if (prize !== expected) return res.status(400).json({ ok: false, error: 'Подмена приза запрещена' });
 
-  const changes = setPrize(row.id, expected);
+  const changes = await setPrize(row.id, expected);
   if (!changes) return res.status(500).json({ ok: false, error: 'Не удалось сохранить приз' });
 
   return res.json({ ok: true, alreadySaved: false, prize: expected });

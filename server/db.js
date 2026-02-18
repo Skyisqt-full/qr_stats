@@ -1,203 +1,183 @@
-// server/db.js
-const fs = require('fs');
-const path = require('path');
-const Database = require('better-sqlite3');
+// server/db.js (Postgres)
+const { Pool } = require('pg');
 
-const dataDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+function makePool() {
+  const cs = process.env.DATABASE_URL;
+  if (!cs) {
+    throw new Error('DATABASE_URL is not set. For local dev use .env or docker-compose.');
+  }
 
-const dbPath = path.join(dataDir, 'qr_stats.sqlite');
-const db = new Database(dbPath);
+  // На Render часто нужен SSL при внешних подключениях; внутри Render может быть и без,
+  // но rejectUnauthorized:false безопаснее для managed PG.
+  const isProd = process.env.NODE_ENV === 'production';
 
-db.pragma('journal_mode = WAL');
+  return new Pool({
+    connectionString: cs,
+    ssl: isProd ? { rejectUnauthorized: false } : undefined
+  });
+}
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS visits (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+const pool = makePool();
+
+async function initDb() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS visits (
+      id BIGSERIAL PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS submissions (
+      id BIGSERIAL PRIMARY KEY,
+      phone_norm TEXT NOT NULL,
+      name TEXT,
+      prize TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      prized_at TIMESTAMPTZ
+    );
+  `);
+
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_submissions_phone ON submissions(phone_norm);`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_submissions_prize ON submissions(prize);`);
+}
+
+async function addVisit() {
+  await pool.query(`INSERT INTO visits DEFAULT VALUES;`);
+}
+
+async function countVisits() {
+  const r = await pool.query(`SELECT COUNT(*)::int AS c FROM visits;`);
+  return r.rows[0]?.c ?? 0;
+}
+
+async function createSubmission(phoneNorm, name) {
+  const r = await pool.query(
+    `INSERT INTO submissions (phone_norm, name) VALUES ($1, $2) RETURNING id;`,
+    [phoneNorm, name || null]
   );
+  return r.rows[0].id;
+}
 
-  CREATE TABLE IF NOT EXISTS submissions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    phone_norm TEXT NOT NULL,
-    prize TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    prized_at TEXT
+async function getSubmissionById(id) {
+  const r = await pool.query(
+    `SELECT id, phone_norm, name, prize, created_at, prized_at
+     FROM submissions
+     WHERE id = $1`,
+    [id]
   );
-
-  CREATE INDEX IF NOT EXISTS idx_submissions_phone ON submissions(phone_norm);
-  CREATE INDEX IF NOT EXISTS idx_submissions_prize ON submissions(prize);
-`);
-
-function ensureColumn(table, column, ddl) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(r => r.name);
-  if (!cols.includes(column)) db.exec(ddl);
+  return r.rows[0] || null;
 }
 
-// миграция: name
-ensureColumn('submissions', 'name', `ALTER TABLE submissions ADD COLUMN name TEXT;`);
-
-const stmtAddVisit = db.prepare(`INSERT INTO visits DEFAULT VALUES`);
-const stmtCountVisits = db.prepare(`SELECT COUNT(*) AS c FROM visits`);
-
-const stmtCreateSubmission = db.prepare(`
-  INSERT INTO submissions (phone_norm, name) VALUES (?, ?)
-`);
-
-const stmtGetSubmissionById = db.prepare(`
-  SELECT id, phone_norm, name, prize, created_at, prized_at
-  FROM submissions
-  WHERE id = ?
-`);
-
-const stmtGetLatestByPhone = db.prepare(`
-  SELECT id, phone_norm, name, prize, created_at, prized_at
-  FROM submissions
-  WHERE phone_norm = ?
-  ORDER BY id DESC
-  LIMIT 1
-`);
-
-const stmtGetLatestByPhoneWithPrize = db.prepare(`
-  SELECT id, phone_norm, name, prize, created_at, prized_at
-  FROM submissions
-  WHERE phone_norm = ? AND prize IS NOT NULL AND prize <> ''
-  ORDER BY id DESC
-  LIMIT 1
-`);
-
-const stmtSetPrize = db.prepare(`
-  UPDATE submissions
-  SET prize = ?, prized_at = datetime('now')
-  WHERE id = ?
-`);
-
-const stmtSetName = db.prepare(`
-  UPDATE submissions
-  SET name = ?
-  WHERE id = ?
-`);
-
-const stmtDeleteSubmission = db.prepare(`
-  DELETE FROM submissions WHERE id = ?
-`);
-
-const stmtPrizeStats = db.prepare(`
-  SELECT prize, COUNT(*) AS c
-  FROM submissions
-  WHERE prize IS NOT NULL AND prize <> ''
-  GROUP BY prize
-  ORDER BY c DESC, prize ASC
-`);
-
-function addVisit() {
-  stmtAddVisit.run();
+async function getLatestByPhone(phoneNorm) {
+  const r = await pool.query(
+    `SELECT id, phone_norm, name, prize, created_at, prized_at
+     FROM submissions
+     WHERE phone_norm = $1
+     ORDER BY id DESC
+     LIMIT 1`,
+    [phoneNorm]
+  );
+  return r.rows[0] || null;
 }
 
-function countVisits() {
-  return stmtCountVisits.get().c;
+async function getLatestByPhoneWithPrize(phoneNorm) {
+  const r = await pool.query(
+    `SELECT id, phone_norm, name, prize, created_at, prized_at
+     FROM submissions
+     WHERE phone_norm = $1 AND prize IS NOT NULL AND prize <> ''
+     ORDER BY id DESC
+     LIMIT 1`,
+    [phoneNorm]
+  );
+  return r.rows[0] || null;
 }
 
-function createSubmission(phoneNorm, name) {
-  const info = stmtCreateSubmission.run(phoneNorm, name || null);
-  return info.lastInsertRowid;
+async function setPrize(submissionId, prize) {
+  const r = await pool.query(
+    `UPDATE submissions
+     SET prize = $1, prized_at = now()
+     WHERE id = $2 AND (prize IS NULL OR prize = '')
+     RETURNING id`,
+    [prize, submissionId]
+  );
+  return r.rowCount;
 }
 
-function getSubmissionById(id) {
-  return stmtGetSubmissionById.get(id);
+async function setName(submissionId, name) {
+  const r = await pool.query(
+    `UPDATE submissions SET name = $1 WHERE id = $2`,
+    [name || null, submissionId]
+  );
+  return r.rowCount;
 }
 
-function getLatestByPhone(phoneNorm) {
-  return stmtGetLatestByPhone.get(phoneNorm);
+async function deleteSubmission(id) {
+  const r = await pool.query(`DELETE FROM submissions WHERE id = $1`, [id]);
+  return r.rowCount;
 }
 
-function getLatestByPhoneWithPrize(phoneNorm) {
-  return stmtGetLatestByPhoneWithPrize.get(phoneNorm);
+async function prizeStats() {
+  const r = await pool.query(
+    `SELECT prize, COUNT(*)::int AS c
+     FROM submissions
+     WHERE prize IS NOT NULL AND prize <> ''
+     GROUP BY prize
+     ORDER BY c DESC, prize ASC`
+  );
+  return r.rows;
 }
 
-function setPrize(submissionId, prize) {
-  return stmtSetPrize.run(prize, submissionId).changes;
-}
-
-function setName(submissionId, name) {
-  return stmtSetName.run(name || null, submissionId).changes;
-}
-
-function deleteSubmission(id) {
-  return stmtDeleteSubmission.run(id).changes;
-}
-
-function prizeStats() {
-  return stmtPrizeStats.all();
-}
-
-/**
- * prize:
- *  - '' => все
- *  - '__NO_PRIZE__' => только без приза
- *  - иначе конкретный приз
- *
- * sort:
- *  - id | created_at | prized_at | phone_norm | name | prize
- * order:
- *  - asc | desc
- */
-function listSubmissions({ prize, sort, order } = {}) {
+async function listSubmissions({ prize, sort, order } = {}) {
   const sortWhitelist = new Set(['id', 'created_at', 'prized_at', 'phone_norm', 'name', 'prize']);
   const orderWhitelist = new Set(['asc', 'desc']);
 
   const sortCol = sortWhitelist.has(String(sort)) ? String(sort) : 'id';
   const sortOrder = orderWhitelist.has(String(order).toLowerCase()) ? String(order).toLowerCase() : 'desc';
 
-  let sql = `
-    SELECT id, phone_norm, name, prize, created_at, prized_at
-    FROM submissions
-  `;
-
   const params = [];
+  let where = '';
 
   if (prize === '__NO_PRIZE__') {
-    sql += ` WHERE (prize IS NULL OR prize = '') `;
+    where = `WHERE (prize IS NULL OR prize = '')`;
   } else if (typeof prize === 'string' && prize.trim() !== '') {
-    sql += ` WHERE prize = ? `;
     params.push(prize.trim());
+    where = `WHERE prize = $1`;
   }
 
-  sql += ` ORDER BY ${sortCol} ${sortOrder} `;
+  const q = `
+    SELECT id, phone_norm, name, prize, created_at, prized_at
+    FROM submissions
+    ${where}
+    ORDER BY ${sortCol} ${sortOrder};
+  `;
 
-  return db.prepare(sql).all(...params);
+  const r = await pool.query(q, params);
+  return r.rows;
 }
 
-// --- reset функции ---
-// Сброс переходов (очистка + сброс авто-ID)
-function resetVisits() {
-  db.exec(`
-    DELETE FROM visits;
-    DELETE FROM sqlite_sequence WHERE name='visits';
-  `);
+async function resetVisits() {
+  await pool.query(`TRUNCATE visits RESTART IDENTITY;`);
 }
 
-// Сброс заявок/призов (очистка + сброс авто-ID)
-function resetSubmissions() {
-  db.exec(`
-    DELETE FROM submissions;
-    DELETE FROM sqlite_sequence WHERE name='submissions';
-  `);
+async function resetSubmissions() {
+  await pool.query(`TRUNCATE submissions RESTART IDENTITY;`);
 }
 
 module.exports = {
-  db,
+  pool,
+  initDb,
   addVisit,
   countVisits,
   createSubmission,
   getSubmissionById,
   getLatestByPhone,
   getLatestByPhoneWithPrize,
-  listSubmissions,
   setPrize,
   setName,
   deleteSubmission,
   prizeStats,
+  listSubmissions,
   resetVisits,
   resetSubmissions
 };

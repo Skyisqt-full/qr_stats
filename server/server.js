@@ -1,50 +1,55 @@
-// server/server.js
-const path = require('path');
+// server.js
+require('dotenv').config();
+
 const express = require('express');
-const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const path = require('path');
 
-const { PORT } = require('./config');
-const { adminAuth, adminLoginHandler, adminLogoutHandler } = require('./auth');
-
-// ВАЖНО: импортируем db, чтобы таблицы создались сразу при старте
-require('./db');
-
-const publicApi = require('./routes/public');
-const adminApi = require('./routes/admin');
+const { initDb } = require('./server/db');
+const publicRoutes = require('./server/routes/public');
+const adminRoutes = require('./server/routes/admin');
 
 const app = express();
 
-app.use(express.json());
-app.use(cookieParser());
+app.set('trust proxy', 1);
 
-// Public static
-app.use('/', express.static(path.join(__dirname, '..', 'public')));
+app.use(express.json({ limit: '1mb' }));
 
-// Логин/логаут API (НЕ защищаем, иначе не залогиниться)
-app.post('/api/admin/login', adminLoginHandler);
-app.post('/api/admin/logout', adminLogoutHandler);
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'dev_secret_change_me',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production'
+    }
+  })
+);
 
-// Admin static: разрешаем login.* без авторизации, остальное — через adminAuth
-const adminDir = path.join(__dirname, '..', 'admin');
-app.use('/admin', (req, res, next) => {
-  const p = req.path.toLowerCase();
-  if (p === '/login.html' || p === '/login.js' || p === '/login.css') return next();
-  return adminAuth(req, res, next);
-}, express.static(adminDir));
+// API
+app.use('/api', publicRoutes);
+app.use('/api/admin', adminRoutes);
 
-// Удобный редирект /admin -> /admin/
-app.get('/admin', (req, res) => res.redirect('/admin/'));
+// static
+app.use('/', express.static(path.join(__dirname, 'public')));
+app.use('/admin', express.static(path.join(__dirname, 'admin')));
 
-// Admin API (защищаем)
-app.use('/api/admin', adminAuth, adminApi);
+// красивый /admin (если не залогинен — на логин)
+app.get('/admin', (req, res) => {
+  if (req.session?.isAdmin) return res.sendFile(path.join(__dirname, 'admin', 'index.html'));
+  return res.redirect('/admin/login.html');
+});
 
-// Public API
-app.use('/api', publicApi);
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-app.get('/health', (req, res) => res.json({ ok: true }));
+const port = Number(process.env.PORT || 3000);
 
-app.listen(PORT, () => {
-  console.log(`qr_stats server running on http://localhost:${PORT}`);
-  console.log(`Landing: http://localhost:${PORT}/`);
-  console.log(`Admin:   http://localhost:${PORT}/admin  (login page)`);
+(async () => {
+  await initDb();
+  app.listen(port, () => console.log(`qr_stats listening on :${port}`));
+})().catch((e) => {
+  console.error('Startup failed:', e);
+  process.exit(1);
 });
