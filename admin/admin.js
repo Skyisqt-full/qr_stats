@@ -66,6 +66,40 @@ function buildSubmissionsUrl(prize, sort, order) {
   return u.toString();
 }
 
+function showWelcomeMessageOnce() {
+  const shownKey = 'admin_design_message_v3';
+  const loginFlag = 'admin_show_design_msg_once';
+
+  try {
+    const shouldShow = sessionStorage.getItem(loginFlag) === '1';
+    sessionStorage.removeItem(loginFlag);
+    if (!shouldShow) return;
+    if (localStorage.getItem(shownKey)) return;
+    localStorage.setItem(shownKey, '1');
+  } catch {
+    return;
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'welcomeModal';
+  modal.innerHTML = `
+    <div class="welcomeModalCard" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+      <div id="welcomeTitle" class="welcomeTitle">поздравляю я изменил вам дизайн братцы</div>
+      <div class="welcomeText">P.S. Игорю с любовью от Артёма и 😘</div>
+      <button class="btn welcomeCloseBtn" type="button">Закрыть</button>
+    </div>
+  `;
+
+  const closeBtn = modal.querySelector('.welcomeCloseBtn');
+  closeBtn?.addEventListener('click', () => {
+    document.body.classList.remove('welcomeModalOpen');
+    modal.remove();
+  });
+
+  document.body.classList.add('welcomeModalOpen');
+  document.body.appendChild(modal);
+}
+
 // В фильтр добавляем ТОЛЬКО allowedPrizes
 async function loadPrizeFilterOptions() {
   const select = document.getElementById('prizeFilter');
@@ -173,6 +207,8 @@ async function loadAll() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  showWelcomeMessageOnce();
+
   const refreshBtn = document.getElementById('refreshBtn');
   const logoutBtn = document.getElementById('logoutBtn');
   const resetVisitsBtn = document.getElementById('resetVisitsBtn');

@@ -15,7 +15,7 @@ function normalizeBYPhone(input) {
 
   return {
     ok: false,
-    error: 'Введите номер BY: +375XXXXXXXXX, 375XXXXXXXXX или 80XXXXXXXXX'
+    error: 'Введите корректный номер BY'
   };
 }
 
@@ -24,15 +24,14 @@ function formatBYPhoneForInput(value) {
   const raw = String(value || '');
   const digits = raw.replace(/\D/g, '');
 
-  if (digits.length === 0) return '';
-  if (!(digits.startsWith('3') || digits.startsWith('8'))) return value;
-
   let core = '';
 
+  if (digits.length === 0) return '+375';
   if (digits.startsWith('375')) core = digits.slice(3);
   else if (digits.startsWith('80')) core = digits.slice(2);
-  else if (digits.startsWith('3')) core = digits.slice(1);
   else if (digits.startsWith('8')) core = digits.slice(1);
+  else if (digits.startsWith('3')) core = digits.slice(1);
+  else core = digits;
 
   core = core.slice(0, 9);
 
@@ -69,11 +68,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try { await postJson('/api/visit', {}); } catch {}
 
+  phoneEl.value = formatBYPhoneForInput(phoneEl.value);
+
   phoneEl.addEventListener('input', () => {
     setError('');
     setMsg('');
     const formatted = formatBYPhoneForInput(phoneEl.value);
-    if (formatted !== phoneEl.value) phoneEl.value = formatted;
+    if (formatted !== phoneEl.value) {
+      phoneEl.value = formatted;
+      phoneEl.setSelectionRange(phoneEl.value.length, phoneEl.value.length);
+    }
   });
 
   btn.addEventListener('click', async () => {

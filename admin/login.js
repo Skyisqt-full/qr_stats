@@ -28,6 +28,8 @@ document.addEventListener('DOMContentLoaded', () => {
         user: userEl.value,
         pass: passEl.value
       });
+      // Помечаем, что переход в админку произошёл сразу после успешного логина.
+      sessionStorage.setItem('admin_show_design_msg_once', '1');
       window.location.href = '/admin/';
     } catch (e) {
       setErr(e.message || 'Ошибка');

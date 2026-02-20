@@ -25,7 +25,7 @@ function normalizeBYPhone(input) {
 
   return {
     ok: false,
-    error: 'Введите номер BY: +375XXXXXXXXX, 375XXXXXXXXX или 80XXXXXXXXX'
+    error: 'Введите корректный номер BY'
   };
 }
 
